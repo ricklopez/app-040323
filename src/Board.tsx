@@ -29,14 +29,20 @@ const BoardWrapper = styled.div<{ numColumns: number }>`
  * Apply the function fn to cells adjacent to the one at the specified row+col
  */
 function applyToAdjacentCells(
-  board: BoardState,
-  row: number,
-  col: number,
-  fn: applyToCellFn
+    board: BoardState,
+    row: number,
+    col: number,
+    fn: applyToCellFn
 ) {
   /* TODO
     Given the row index and col index of a cell, call fn(rowIndex, columnIndex) for each cell adjacent to it
   */
+  const workingRow = board[row];
+  workingRow.filter((cell, index) => index >= col).forEach((cell, index) => {
+    if(cell.value !== MINE_CELL_VALUE) {
+      fn(row, index + col);
+    }
+  });
 }
 
 /**
@@ -44,17 +50,17 @@ function applyToAdjacentCells(
  * @returns Array containing a flat representation of mine locations
  */
 function getMineLocations({
-  numColumns,
-  numMines,
-  numRows,
-}: {
+                            numColumns,
+                            numMines,
+                            numRows,
+                          }: {
   numColumns: number;
   numMines: number;
   numRows: number;
 }): number[] {
   return shuffleArray(Array.from(Array(numColumns * numRows).keys())).slice(
-    0,
-    numMines
+      0,
+      numMines
   );
 }
 
@@ -63,9 +69,9 @@ function getMineLocations({
  * Increase the mine count in adjacent cells for each mine placed
  */
 function placeMines(
-  board: BoardState,
-  mineLocations: number[],
-  numColumns: number
+    board: BoardState,
+    mineLocations: number[],
+    numColumns: number
 ) {
   /**
    * TODO: Given the flat array of mine locations, place the mines on `board`
@@ -73,6 +79,13 @@ function placeMines(
    * A mine can be denoted by setting the value of a cell to MINE_CELL_VALUE
    * The applyToAdjacentCells function should be used to increase the count of each cell adjacent to a mine (unless the adjacent cell is a mine)
    */
+
+  mineLocations.forEach((mineLocation, index) => {
+    const localRowIndex = (Math.trunc(mineLocation / numColumns));
+    const localColIndex = (mineLocation - (localRowIndex * numColumns));
+    board[localRowIndex][localColIndex].value = MINE_CELL_VALUE;
+  })
+
 }
 
 function createEmptyBoard(numRows: number, numColumns: number): BoardState {
@@ -90,14 +103,16 @@ function createEmptyBoard(numRows: number, numColumns: number): BoardState {
 const Board = ({ numColumns, numMines, numRows }: BoardProps) => {
   const [board, setBoard] = useState<BoardState>();
   const [error, setError] = useState<string>();
+  const ALLOWED_HITS = 0;
+  const initialBoardCheckState = {revealed: 0, selectedMines: 0, total: 0, totalMines: 0};
 
   useEffect(() => {
     if (board) return;
     if (
-      typeof numColumns !== "number" ||
-      typeof numRows !== "number" ||
-      numColumns < 0 ||
-      numRows < 0
+        typeof numColumns !== "number" ||
+        typeof numRows !== "number" ||
+        numColumns < 0 ||
+        numRows < 0
     ) {
       setError(`Invalid dimensions ${numRows}x${numColumns}`);
       return;
@@ -116,9 +131,33 @@ const Board = ({ numColumns, numMines, numRows }: BoardProps) => {
    * A user has won if all cells are either mines or have been revealed.
    */
 
-  const won = false; // TODO: Assign to true if player has won, false otherwise
 
-  const lost = false; // TODO: Assign to false if player has lost, false otherwise
+  const boardCheck = board?.reduce((acc, val, index) => {
+    const row = val;
+    if (!row) return acc;
+    row.forEach((cell) => {
+      if (cell.state === 'revealed'){
+        acc.revealed++;
+      }
+      if (cell.state === 'revealed' && cell.value === MINE_CELL_VALUE){
+        acc.selectedMines++;
+      }
+
+      if (cell.value === MINE_CELL_VALUE){
+        acc.totalMines++;
+      }
+
+      acc.total++
+    })
+    return acc
+  }, initialBoardCheckState) || initialBoardCheckState;
+
+  const {revealed, total, totalMines, selectedMines} = boardCheck;
+
+  const won = revealed > 0 && (total === (revealed + totalMines)); // TODO: Assign to true if player has won, false otherwise
+
+  const lost = selectedMines > ALLOWED_HITS; // TODO: Assign to false if player has lost, false otherwise
+
 
   useEffect(() => {
     const winLoseStatus = lost ? "lose" : won ? "win" : undefined;
@@ -128,9 +167,9 @@ const Board = ({ numColumns, numMines, numRows }: BoardProps) => {
   }, [won, lost]);
 
   const handleCellStateChange: cellStateChangeFn = (
-    row,
-    col,
-    newState: CellState
+      row,
+      col,
+      newState: CellState
   ) => {
     const innerHandleCellStateChange = (draftBoard: BoardState) => {
       const revealCell = (row: number, col: number) => {
@@ -138,8 +177,8 @@ const Board = ({ numColumns, numMines, numRows }: BoardProps) => {
         if (draftBoard[row][col].state === newState) return;
         draftBoard[row][col].state = newState;
         if (
-          draftBoard[row][col].value === EMPTY_CELL_VALUE &&
-          newState === "revealed"
+            draftBoard[row][col].value === EMPTY_CELL_VALUE &&
+            newState === "revealed"
         ) {
           applyToAdjacentCells(draftBoard, row, col, revealCell);
         }
@@ -149,32 +188,35 @@ const Board = ({ numColumns, numMines, numRows }: BoardProps) => {
 
     if (won || lost) return;
     setBoard((currentBoard) =>
-      produce(currentBoard, (draftBoard: BoardState) => {
-        innerHandleCellStateChange(draftBoard);
-      })
+        produce(currentBoard, (draftBoard: BoardState) => {
+          innerHandleCellStateChange(draftBoard);
+        })
     );
   };
 
   const reset = () => setBoard(undefined);
 
   return board ? (
-    <div>
-      <BoardWrapper numColumns={numColumns}>
-        {board.map((row, index) => (
-          <Row
-            cells={row}
-            key={`${index}`}
-            onCellStateChange={handleCellStateChange}
-            rowIndex={index}
-          />
-        ))}
-      </BoardWrapper>
-      <button onClick={reset} style={{ marginTop: "0.5rem" }}>
-        Reset
-      </button>
-    </div>
+      <div>
+        <BoardWrapper numColumns={numColumns}>
+          {board.map((row, index) => (
+              <Row
+                  cells={row}
+                  key={`${index}`}
+                  onCellStateChange={handleCellStateChange}
+                  rowIndex={index}
+              />
+          ))}
+        </BoardWrapper>
+        <button onClick={reset} style={{ marginTop: "0.5rem" }}>
+          Reset
+        </button>
+        {process.env.NODE_ENV === "development" && (
+            <pre>{JSON.stringify(boardCheck)}</pre>
+        )}
+      </div>
   ) : (
-    <div>{error}</div>
+      <div>{error}</div>
   );
 };
 
